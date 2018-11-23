@@ -373,6 +373,7 @@ Afin de faciliter les tests, nous allons utiliser un petit utilitaire : `mailcat
 ```
 docker run -d -p 1080:80 -p 1025:25 --name smtp_dev tophfr/mailcatcher
 ```
+
 Ajoutons la configuration de `mailcatcher` dans notre fichier `email_service/config.py` : 
 ```python
 class Config:
@@ -669,7 +670,7 @@ class DevelopmentConfig(Config):
     """
     @staticmethod
     def init_app(app):
-        super().init_app(app)
+        Config.init_app(app)
         logger = logging.getLogger(__name__)
         handler = RotatingFileHandler(app.config['LOG_PATH'],
                                       maxBytes=app.config['LOG_SIZE'],
