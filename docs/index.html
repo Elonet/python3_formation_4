@@ -679,7 +679,7 @@ En configuration de développement, nous écrirons les logs du service dans des 
     """</span>
     @<span class="token builtin">staticmethod</span>
     <span class="token keyword">def</span> <span class="token function">init_app</span><span class="token punctuation">(</span>app<span class="token punctuation">)</span><span class="token punctuation">:</span>
-        <span class="token builtin">super</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span>init_app<span class="token punctuation">(</span>app<span class="token punctuation">)</span>
+        Config<span class="token punctuation">.</span>init_app<span class="token punctuation">(</span>app<span class="token punctuation">)</span>
         logger <span class="token operator">=</span> logging<span class="token punctuation">.</span>getLogger<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
         handler <span class="token operator">=</span> RotatingFileHandler<span class="token punctuation">(</span>app<span class="token punctuation">.</span>config<span class="token punctuation">[</span><span class="token string">'LOG_PATH'</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
                                       maxBytes<span class="token operator">=</span>app<span class="token punctuation">.</span>config<span class="token punctuation">[</span><span class="token string">'LOG_SIZE'</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
