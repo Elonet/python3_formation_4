@@ -671,7 +671,6 @@ class DevelopmentConfig(Config):
     @staticmethod
     def init_app(app):
         Config.init_app(app)
-        logger = logging.getLogger(__name__)
         handler = RotatingFileHandler(app.config['LOG_PATH'],
                                       maxBytes=app.config['LOG_SIZE'],
                                       backupCount=app.config['LOG_COUNT'],
@@ -682,7 +681,7 @@ class DevelopmentConfig(Config):
         )
         handler.setFormatter(formatter)
         handler.setLevel(getattr(logging, app.config['LOG_LEVEL'].upper()))
-        logger.addHandler(handler)
+        app.logger.addHandler(handler)
 ```
 
 # 3 - Celery
