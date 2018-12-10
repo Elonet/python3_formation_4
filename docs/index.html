@@ -915,17 +915,19 @@ app <span class="token operator">=</span> Celery<span class="token punctuation">
 <span class="token keyword">from</span> flask <span class="token keyword">import</span> Flask
 <span class="token keyword">from</span> celery <span class="token keyword">import</span> Celery
 <span class="token keyword">from</span> config <span class="token keyword">import</span> config
+<span class="token keyword">from</span> <span class="token punctuation">.</span>extensions <span class="token keyword">import</span> mail
 
-<span class="token keyword">def</span> <span class="token function">make_celery</span><span class="token punctuation">(</span>app<span class="token punctuation">)</span><span class="token punctuation">:</span>
+<span class="token keyword">def</span> <span class="token function">make_celery</span><span class="token punctuation">(</span>app<span class="token operator">=</span><span class="token boolean">None</span><span class="token punctuation">,</span> config_name<span class="token operator">=</span><span class="token string">'default'</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
     <span class="token triple-quoted-string string">"""
     Create Celery application
-    
+
     :param app: Flask application
     :type app: Flask
-    
+
     :return: Celery application
     :rtype: Celery
     """</span>
+    app <span class="token operator">=</span> app <span class="token operator">or</span> create_app<span class="token punctuation">(</span>config_name<span class="token punctuation">)</span>
     celery <span class="token operator">=</span> Celery<span class="token punctuation">(</span>app<span class="token punctuation">.</span>import_name<span class="token punctuation">,</span> backend<span class="token operator">=</span>app<span class="token punctuation">.</span>config<span class="token punctuation">[</span><span class="token string">'CELERY_RESULT_BACKEND'</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
                     broker<span class="token operator">=</span>app<span class="token punctuation">.</span>config<span class="token punctuation">[</span><span class="token string">'CELERY_BROKER_URL'</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
     celery<span class="token punctuation">.</span>conf<span class="token punctuation">.</span>update<span class="token punctuation">(</span>app<span class="token punctuation">.</span>config<span class="token punctuation">)</span>
@@ -962,7 +964,7 @@ app <span class="token operator">=</span> Celery<span class="token punctuation">
     Init extensions
     :param flask_app:
     """</span>
-    <span class="token keyword">pass</span>
+    mail<span class="token punctuation">.</span>init_app<span class="token punctuation">(</span>flask_app<span class="token punctuation">)</span>
 </code></pre>
 <p>Nous voyons que Celery nécessite <code>CELERY_RESULT_BACKEND</code> et <code>CELERY_BROKER_URL</code> dans la configuration, ajoutons les propriétés dans notre fichier <code>email_service/config.py</code></p>
 <pre class=" language-python"><code class="prism  language-python"><span class="token comment"># -*- coding: utf-8 -*-</span>
@@ -1332,7 +1334,7 @@ networks:
 <h2 id="installation-des-outils">Installation des outils</h2>
 <p>Pour pouvoir créer une bibliothèque, nous avons besoin de 2 bibliothèques existantes <code>setuptools</code> et <code>wheel</code></p>
 <pre><code>pip install setuptools
-pip install wheels
+pip install wheel
 </code></pre>
 <h2 id="setup.py"><code>setup.py</code></h2>
 <p>Le fichier <code>setup.py</code> est le fichier qui décris notre bibliothèque, c’est dans ce fichier qu’on indique les informations tels que l’auteur, la version, la description, les dépendances, etc</p>
@@ -1433,6 +1435,7 @@ Adding password for user &lt;your_username&gt;
 <pre><code>[distutils]
 index-servers =
   pypi
+  local
 
 [pypi]
 username:&lt;your_pypi_username&gt;

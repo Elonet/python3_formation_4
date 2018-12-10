@@ -938,8 +938,9 @@ Le code de l'usine à Celery provient directement de la documentation Flask :
 from flask import Flask
 from celery import Celery
 from config import config
+from .extensions import mail
 
-def make_celery(app):
+def make_celery(app=None, config_name='default'):
     """
     Create Celery application
     
@@ -949,6 +950,7 @@ def make_celery(app):
     :return: Celery application
     :rtype: Celery
     """
+    app = app or create_app(config_name)
     celery = Celery(app.import_name, backend=app.config['CELERY_RESULT_BACKEND'],
                     broker=app.config['CELERY_BROKER_URL'])
     celery.conf.update(app.config)
@@ -985,7 +987,7 @@ def extensions(flask_app):
     Init extensions
     :param flask_app:
     """
-    pass
+    mail.init_app(flask_app)
 ```
 
 Nous voyons que Celery nécessite `CELERY_RESULT_BACKEND` et `CELERY_BROKER_URL` dans la configuration, ajoutons les propriétés dans notre fichier `email_service/config.py`
@@ -1445,7 +1447,7 @@ Pour pouvoir créer une bibliothèque, nous avons besoin de 2 bibliothèques exi
 
 ```
 pip install setuptools
-pip install wheels
+pip install wheel
 ```
 
 ## `setup.py`
@@ -1593,6 +1595,7 @@ Il faut de nouveau configurer notre fichier `.pypirc` afin d'ajouter notre nouve
 [distutils]
 index-servers =
   pypi
+  local
 
 [pypi]
 username:<your_pypi_username>
