@@ -1,5 +1,7 @@
 # Python 3 Formation 4
 
+![Elonet](https://elonet.fr/img/logo.png)
+
 # 1 - Micro service
 
 Dans la précédente formation, nous avons vu comment construire un service REST à l'aide de Flask et de l'extension Flask RestPlus, nous allons maintenant mettre ça en pratique à travers un micro-service d'envoi d’emails.
@@ -730,7 +732,7 @@ Pour installer `Celery` il suffit d'utiliser `pip`
 > Il faut aussi installer le connecteur `Redis`
 ```
 pip install celery
-pip install redis
+pip install redis==2.10.6
 ```
 
 ## Usage
@@ -1428,4 +1430,186 @@ volumes:
 networks:
   services_network:
     driver: bridge
+```
+
+
+# 6 - Création de bibliothèques
+
+Jusqu'a présent nous avons vu comment utiliser des bibliothèques crées par des utilisateurs.
+
+Nous allons maintenant voir comment créer nos bibliothèques et les rendre disponible sur `pip`
+
+## Installation des outils
+
+Pour pouvoir créer une bibliothèque, nous avons besoin de 2 bibliothèques existantes `setuptools` et `wheel`
+
+```
+pip install setuptools
+pip install wheels
+```
+
+## `setup.py`
+
+Le fichier `setup.py` est le fichier qui décris notre bibliothèque, c'est dans ce fichier qu'on indique les informations tels que l'auteur, la version, la description, les dépendances, etc
+
+La liste des informations possibles est disponible à l'adresse https://docs.python.org/2/distutils/apiref.html?highlight=bdist
+
+
+Example d'une bibliothèque `elonet_formation_4`
+```
+elonet_formation_4
+    __init__.py
+    operations.py
+setup.py
+```
+
+elonet_formation_4/__init__.py
+```python
+from .operations import *
+```
+
+elonet_formation_4/operations.py
+```python
+import requests  # Dépendance
+
+
+def operation_tres_compliquee(nombre1, nombre2):
+    return nombre1 + nombre2
+
+
+def operation_web(url):
+    return requests.get(url)
+
+```
+
+setup.py
+```python
+from setuptools import setup
+
+# On importe notre bibliothèque
+import elonet_formation_4
+
+setup(
+    name='elonet_formation_4',
+    version='0.0.1',
+    author='Rasta dev',
+    author_email='arthur@elonet.fr',
+    url='https://elonet.github.io/python3_formation_4/',
+    packages=['elonet_formation_4'],                                          # On ajoute notre bibliothèque au setup
+    install_requires=['requests==2.20.1'],
+    description='Demonstration de creation d\'un package Python',
+    plateformes='ALL',
+)
+```
+
+> `platformes` permet de spécifier la plateforme de destination, les valeurs possibles sont : ALL, WINDOWS, LINUX, MAC
+
+## Installation de la bibliothèque
+
+Pour installer la bibliothèque suffit de lancer la commande suivante :
+
+```
+python setup.py install
+```
+
+Nous pouvons ensuite utiliser notre bibliothèque dans un interpréteur ou un programmer Python
+
+```python
+from elonet_formation_4 import operation_tres_compliquee
+operation_tres_compliquee(3, 4)
+7
+```
+
+## Upload sur PIP
+
+Pour pouvoir upload une bibliothèque sur PIP, il faut d'abord s'enregistrer à l'adresse suivante : https://pypi.org/account/register/
+
+Il faut ensuite configurer notre PIP à l'aide du fichier `.pypirc`
+
+Créer ou modifier le fichier `~/.pypirc`
+```
+[distutils]
+index-servers =
+  pypi
+
+[pypi]
+username:<your_pypi_username>
+password:<your_pypi_passwd>
+```
+
+Il suffit ensuite de lancer la commande 
+```
+python setup.py sdist upload -r pypi
+```
+
+Une fois la bibliothèque uploadé, vous pouvez la retrouver à l'adresse : https://pypi.org/manage/projects/
+
+# 7 - Pip personnalisé
+
+Dans certains cas nous ne souhaitons pas rendre nos bibliothèques disponibles sur le repos PIP officiel, dans ce cas nous devons héberger notre propre repos
+
+Pour cela nous avons accès au projet pypiserver : https://github.com/pypiserver/pypiserver
+
+## Serveur docker
+
+Pour des raisons de simplicité, nous allons utiliser l'image Docker fournis 
+
+Commande : 
+```
+docker run -p 80:8080 -v ~/.htpasswd:/data/.htpasswd pypiserver/pypiserver:latest -P .htpasswd packages
+```
+
+Nous voyons que la commande attend un fichier `.htpasswd` pour gérer l'authentification
+
+### Préparation
+
+Créons un dossier `pypi_local` qui contiendra notre fichier `.htpasswd`
+
+```
+mkdir pypi_local
+cd pypi_local
+
+htpasswd -c -s .htpasswd <your_username>
+New password:
+Re-type new password:
+Adding password for user <your_username>
+```
+
+### Lancement
+
+Il faut ensuite lancer le serveur en lui fournissant un nom et en spécifiant le dossier contenant le fichier `.htpasswd`
+
+```
+docker run -p 80:8080 --name pypi_dev -v /home/rastadev/pypi_local/.htpasswd:/data/.htpasswd pypiserver/pypiserver:latest -P .htpasswd packages
+```
+
+Notre serveur PIP est maintenant en ligne à l'adresse : http://localhost
+
+### Configuration
+
+Il faut de nouveau configurer notre fichier `.pypirc` afin d'ajouter notre nouveau serveur
+
+```
+[distutils]
+index-servers =
+  pypi
+
+[pypi]
+username:<your_pypi_username>
+password:<your_pypi_passwd>
+
+[local]
+repository: http://localhost
+username:<your_username>
+password:<your_password>
+```
+
+Nous pouvons désormais upload notre bibliothèque sur notre serveur à l'aide de la commande
+```
+python setup.py sdist upload -r local
+```
+
+Nous pouvons télécharger une bibliothèque depuis notre serveur à l'aide de la commande
+```
+pip install --index-url http://localhost elonet_formation_4
 ```

@@ -51,6 +51,19 @@
 <li><a href="#mise-en-place-1">Mise en place</a></li>
 </ul>
 </li>
+<li><a href="#création-de-bibliothèques">6 - Création de bibliothèques</a>
+<ul>
+<li><a href="#installation-des-outils">Installation des outils</a></li>
+<li><a href="#setup.py">setup.py</a></li>
+<li><a href="#installation-de-la-bibliothèque">Installation de la bibliothèque</a></li>
+<li><a href="#upload-sur-pip">Upload sur PIP</a></li>
+</ul>
+</li>
+<li><a href="#pip-personnalisé">7 - Pip personnalisé</a>
+<ul>
+<li><a href="#serveur-docker">Serveur docker</a></li>
+</ul>
+</li>
 </ul>
 
     </div>
@@ -58,6 +71,7 @@
   <div class="stackedit__right">
     <div class="stackedit__html">
       <h1 id="python-3-formation-4">Python 3 Formation 4</h1>
+<p><img src="https://elonet.fr/img/logo.png" alt="Elonet"></p>
 <h1 id="micro-service">1 - Micro service</h1>
 <p>Dans la précédente formation, nous avons vu comment construire un service REST à l’aide de Flask et de l’extension Flask RestPlus, nous allons maintenant mettre ça en pratique à travers un micro-service d’envoi d’emails.<br>
 L’objectif est de pouvoir envoyer un email à un grand nombre de personnes tout en ayant un service qui répond très rapidement aux requêtes.</p>
@@ -680,7 +694,6 @@ En configuration de développement, nous écrirons les logs du service dans des 
     @<span class="token builtin">staticmethod</span>
     <span class="token keyword">def</span> <span class="token function">init_app</span><span class="token punctuation">(</span>app<span class="token punctuation">)</span><span class="token punctuation">:</span>
         Config<span class="token punctuation">.</span>init_app<span class="token punctuation">(</span>app<span class="token punctuation">)</span>
-        logger <span class="token operator">=</span> logging<span class="token punctuation">.</span>getLogger<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
         handler <span class="token operator">=</span> RotatingFileHandler<span class="token punctuation">(</span>app<span class="token punctuation">.</span>config<span class="token punctuation">[</span><span class="token string">'LOG_PATH'</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
                                       maxBytes<span class="token operator">=</span>app<span class="token punctuation">.</span>config<span class="token punctuation">[</span><span class="token string">'LOG_SIZE'</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
                                       backupCount<span class="token operator">=</span>app<span class="token punctuation">.</span>config<span class="token punctuation">[</span><span class="token string">'LOG_COUNT'</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
@@ -691,7 +704,7 @@ En configuration de développement, nous écrirons les logs du service dans des 
         <span class="token punctuation">)</span>
         handler<span class="token punctuation">.</span>setFormatter<span class="token punctuation">(</span>formatter<span class="token punctuation">)</span>
         handler<span class="token punctuation">.</span>setLevel<span class="token punctuation">(</span><span class="token builtin">getattr</span><span class="token punctuation">(</span>logging<span class="token punctuation">,</span> app<span class="token punctuation">.</span>config<span class="token punctuation">[</span><span class="token string">'LOG_LEVEL'</span><span class="token punctuation">]</span><span class="token punctuation">.</span>upper<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
-        logger<span class="token punctuation">.</span>addHandler<span class="token punctuation">(</span>handler<span class="token punctuation">)</span>
+        app<span class="token punctuation">.</span>logger<span class="token punctuation">.</span>addHandler<span class="token punctuation">(</span>handler<span class="token punctuation">)</span>
 </code></pre>
 <h1 id="celery">3 - Celery</h1>
 <p>Dans certains cas, nous avons besoin de réaliser des actions en dehors du contexte d’exécution de notre programme par exemple :</p>
@@ -732,7 +745,7 @@ Une solution est d’utiliser <code>Celery</code>, une bibliothèque offrant un 
 <p>Il faut aussi installer le connecteur <code>Redis</code></p>
 </blockquote>
 <pre><code>pip install celery
-pip install redis
+pip install redis==2.10.6
 </code></pre>
 <h2 id="usage-1">Usage</h2>
 <h3 id="création-de-lapplication">Création de l’application</h3>
@@ -1312,6 +1325,129 @@ volumes:
 networks:
   services_network:
     driver: bridge
+</code></pre>
+<h1 id="création-de-bibliothèques">6 - Création de bibliothèques</h1>
+<p>Jusqu’a présent nous avons vu comment utiliser des bibliothèques crées par des utilisateurs.</p>
+<p>Nous allons maintenant voir comment créer nos bibliothèques et les rendre disponible sur <code>pip</code></p>
+<h2 id="installation-des-outils">Installation des outils</h2>
+<p>Pour pouvoir créer une bibliothèque, nous avons besoin de 2 bibliothèques existantes <code>setuptools</code> et <code>wheel</code></p>
+<pre><code>pip install setuptools
+pip install wheels
+</code></pre>
+<h2 id="setup.py"><code>setup.py</code></h2>
+<p>Le fichier <code>setup.py</code> est le fichier qui décris notre bibliothèque, c’est dans ce fichier qu’on indique les informations tels que l’auteur, la version, la description, les dépendances, etc</p>
+<p>La liste des informations possibles est disponible à l’adresse <a href="https://docs.python.org/2/distutils/apiref.html?highlight=bdist">https://docs.python.org/2/distutils/apiref.html?highlight=bdist</a></p>
+<p>Example d’une bibliothèque <code>elonet_formation_4</code></p>
+<pre><code>elonet_formation_4
+    __init__.py
+    operations.py
+setup.py
+</code></pre>
+<p>elonet_formation_4/<strong>init</strong>.py</p>
+<pre class=" language-python"><code class="prism  language-python"><span class="token keyword">from</span> <span class="token punctuation">.</span>operations <span class="token keyword">import</span> <span class="token operator">*</span>
+</code></pre>
+<p>elonet_formation_4/operations.py</p>
+<pre class=" language-python"><code class="prism  language-python"><span class="token keyword">import</span> requests  <span class="token comment"># Dépendance</span>
+
+
+<span class="token keyword">def</span> <span class="token function">operation_tres_compliquee</span><span class="token punctuation">(</span>nombre1<span class="token punctuation">,</span> nombre2<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">return</span> nombre1 <span class="token operator">+</span> nombre2
+
+
+<span class="token keyword">def</span> <span class="token function">operation_web</span><span class="token punctuation">(</span>url<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token keyword">return</span> requests<span class="token punctuation">.</span>get<span class="token punctuation">(</span>url<span class="token punctuation">)</span>
+
+</code></pre>
+<p><a href="http://setup.py">setup.py</a></p>
+<pre class=" language-python"><code class="prism  language-python"><span class="token keyword">from</span> setuptools <span class="token keyword">import</span> setup
+
+<span class="token comment"># On importe notre bibliothèque</span>
+<span class="token keyword">import</span> elonet_formation_4
+
+setup<span class="token punctuation">(</span>
+    name<span class="token operator">=</span><span class="token string">'elonet_formation_4'</span><span class="token punctuation">,</span>
+    version<span class="token operator">=</span><span class="token string">'0.0.1'</span><span class="token punctuation">,</span>
+    author<span class="token operator">=</span><span class="token string">'Rasta dev'</span><span class="token punctuation">,</span>
+    author_email<span class="token operator">=</span><span class="token string">'arthur@elonet.fr'</span><span class="token punctuation">,</span>
+    url<span class="token operator">=</span><span class="token string">'https://elonet.github.io/python3_formation_4/'</span><span class="token punctuation">,</span>
+    packages<span class="token operator">=</span><span class="token punctuation">[</span><span class="token string">'elonet_formation_4'</span><span class="token punctuation">]</span><span class="token punctuation">,</span>                                          <span class="token comment"># On ajoute notre bibliothèque au setup</span>
+    install_requires<span class="token operator">=</span><span class="token punctuation">[</span><span class="token string">'requests==2.20.1'</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
+    description<span class="token operator">=</span><span class="token string">'Demonstration de creation d\'un package Python'</span><span class="token punctuation">,</span>
+    plateformes<span class="token operator">=</span><span class="token string">'ALL'</span><span class="token punctuation">,</span>
+<span class="token punctuation">)</span>
+</code></pre>
+<blockquote>
+<p><code>platformes</code> permet de spécifier la plateforme de destination, les valeurs possibles sont : ALL, WINDOWS, LINUX, MAC</p>
+</blockquote>
+<h2 id="installation-de-la-bibliothèque">Installation de la bibliothèque</h2>
+<p>Pour installer la bibliothèque suffit de lancer la commande suivante :</p>
+<pre><code>python setup.py install
+</code></pre>
+<p>Nous pouvons ensuite utiliser notre bibliothèque dans un interpréteur ou un programmer Python</p>
+<pre class=" language-python"><code class="prism  language-python"><span class="token keyword">from</span> elonet_formation_4 <span class="token keyword">import</span> operation_tres_compliquee
+operation_tres_compliquee<span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">,</span> <span class="token number">4</span><span class="token punctuation">)</span>
+<span class="token number">7</span>
+</code></pre>
+<h2 id="upload-sur-pip">Upload sur PIP</h2>
+<p>Pour pouvoir upload une bibliothèque sur PIP, il faut d’abord s’enregistrer à l’adresse suivante : <a href="https://pypi.org/account/register/">https://pypi.org/account/register/</a></p>
+<p>Il faut ensuite configurer notre PIP à l’aide du fichier <code>.pypirc</code></p>
+<p>Créer ou modifier le fichier <code>~/.pypirc</code></p>
+<pre><code>[distutils]
+index-servers =
+  pypi
+
+[pypi]
+username:&lt;your_pypi_username&gt;
+password:&lt;your_pypi_passwd&gt;
+</code></pre>
+<p>Il suffit ensuite de lancer la commande</p>
+<pre><code>python setup.py sdist upload -r pypi
+</code></pre>
+<p>Une fois la bibliothèque uploadé, vous pouvez la retrouver à l’adresse : <a href="https://pypi.org/manage/projects/">https://pypi.org/manage/projects/</a></p>
+<h1 id="pip-personnalisé">7 - Pip personnalisé</h1>
+<p>Dans certains cas nous ne souhaitons pas rendre nos bibliothèques disponibles sur le repos PIP officiel, dans ce cas nous devons héberger notre propre repos</p>
+<p>Pour cela nous avons accès au projet pypiserver : <a href="https://github.com/pypiserver/pypiserver">https://github.com/pypiserver/pypiserver</a></p>
+<h2 id="serveur-docker">Serveur docker</h2>
+<p>Pour des raisons de simplicité, nous allons utiliser l’image Docker fournis</p>
+<p>Commande :</p>
+<pre><code>docker run -p 80:8080 -v ~/.htpasswd:/data/.htpasswd pypiserver/pypiserver:latest -P .htpasswd packages
+</code></pre>
+<p>Nous voyons que la commande attend un fichier <code>.htpasswd</code> pour gérer l’authentification</p>
+<h3 id="préparation">Préparation</h3>
+<p>Créons un dossier <code>pypi_local</code> qui contiendra notre fichier <code>.htpasswd</code></p>
+<pre><code>mkdir pypi_local
+cd pypi_local
+
+htpasswd -c -s .htpasswd &lt;your_username&gt;
+New password:
+Re-type new password:
+Adding password for user &lt;your_username&gt;
+</code></pre>
+<h3 id="lancement-1">Lancement</h3>
+<p>Il faut ensuite lancer le serveur en lui fournissant un nom et en spécifiant le dossier contenant le fichier <code>.htpasswd</code></p>
+<pre><code>docker run -p 80:8080 --name pypi_dev -v /home/rastadev/pypi_local/.htpasswd:/data/.htpasswd pypiserver/pypiserver:latest -P .htpasswd packages
+</code></pre>
+<p>Notre serveur PIP est maintenant en ligne à l’adresse : <a href="http://localhost">http://localhost</a></p>
+<h3 id="configuration-1">Configuration</h3>
+<p>Il faut de nouveau configurer notre fichier <code>.pypirc</code> afin d’ajouter notre nouveau serveur</p>
+<pre><code>[distutils]
+index-servers =
+  pypi
+
+[pypi]
+username:&lt;your_pypi_username&gt;
+password:&lt;your_pypi_passwd&gt;
+
+[local]
+repository: http://localhost
+username:&lt;your_username&gt;
+password:&lt;your_password&gt;
+</code></pre>
+<p>Nous pouvons désormais upload notre bibliothèque sur notre serveur à l’aide de la commande</p>
+<pre><code>python setup.py sdist upload -r local
+</code></pre>
+<p>Nous pouvons télécharger une bibliothèque depuis notre serveur à l’aide de la commande</p>
+<pre><code>pip install --index-url http://localhost elonet_formation_4
 </code></pre>
 
     </div>
