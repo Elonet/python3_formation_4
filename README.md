@@ -5,6 +5,7 @@
 # 1 - Micro service
 
 Dans la précédente formation, nous avons vu comment construire un service REST à l'aide de Flask et de l'extension Flask RestPlus, nous allons maintenant mettre ça en pratique à travers un micro-service d'envoi d’emails.
+
 L'objectif est de pouvoir envoyer un email à un grand nombre de personnes tout en ayant un service qui répond très rapidement aux requêtes.
 
 ## Mise en place du micro service
@@ -732,7 +733,7 @@ Pour installer `Celery` il suffit d'utiliser `pip`
 > Il faut aussi installer le connecteur `Redis`
 ```
 pip install celery
-pip install redis==2.10.6
+pip install redis
 ```
 
 ## Usage
@@ -930,77 +931,96 @@ De plus il est même possible de programmer un minuteur avant l'envoi
 
 ### Mise en place
 
-Pour pouvoir utiliser Celery avec notre service Flask, il faut ajouter une usine à application Celery dans le fichier `email_service/app/__init.py`
+Pour pouvoir utiliser Celery avec notre service Flask, il faut créer une application Celery que nous pourrons appeler et lancer.
 
-Le code de l'usine à Celery provient directement de la documentation Flask :
-```python
-# -*- coding: utf-8 -*-
-from flask import Flask
-from celery import Celery
-from config import config
-from .extensions import mail
-
-def make_celery(app=None, config_name='default'):
-    """
-    Create Celery application
-    
-    :param app: Flask application
-    :type app: Flask
-    
-    :return: Celery application
-    :rtype: Celery
-    """
-    app = app or create_app(config_name)
-    celery = Celery(app.import_name, backend=app.config['CELERY_RESULT_BACKEND'],
-                    broker=app.config['CELERY_BROKER_URL'])
-    celery.conf.update(app.config)
-    TaskBase = celery.Task
-    class ContextTask(TaskBase):
-        abstract = True
-        def __call__(self, *args, **kwargs):
-            with app.app_context():
-                return TaskBase.__call__(self, *args, **kwargs)
-    celery.Task = ContextTask
-    return celery
-
-def create_app(config_name='default'):
-    """
-    Create application
-    :param config_name: Configuration name
-    :type config_name: str
-    :return: Flask app
-    :rtype: Flask
-    """
-    # Import blueprint here
-    # from .xxx import blueprint as xxx_blueprint
-    from .api import blueprint as api_blueprint
-    app = Flask(__name__)
-    app.config.from_object(config[config_name])
-    # Register blueprint here
-    # app.register_blueprint(xxx_blueprint)
-    app.register_blueprint(api_blueprint)
-    extensions(app)
-    return app
-
-def extensions(flask_app):
-    """
-    Init extensions
-    :param flask_app:
-    """
-    mail.init_app(flask_app)
+Créons un dossier l'arboresence suivante:
+```
+worker
+  __init__.py
+  worker.py
+  tasks.py
 ```
 
-Nous voyons que Celery nécessite `CELERY_RESULT_BACKEND` et `CELERY_BROKER_URL` dans la configuration, ajoutons les propriétés dans notre fichier `email_service/config.py`
+> Le fichier worker.py contiendra notre application Celery qui sera lancée par le worker
+> Le fichier tasks.py contiendra les taches de notre application Celery
 
+Commencons par créer l'application Celery à partir de la configuration de notre application Flask
+
+Fichier `email_service/worker/worker.py`
 ```python
 # -*- coding: utf-8 -*-
+
+import os
+from celery import Celery
+from config import Config
+
+app = Celery()
+
+app.conf.update({
+    'BROKER_URL': Config.CELERY_BROKER,
+    'BACKEND_URL': Config.CELERY_BACKEND,
+    'CELERY_IMPORTS': Config.CELERY_IMPORTS
+})
+```
+
+Pour l'envoi de email, nous ne pouvons plus utiliser Flask-Mail, nous allons utiliser la bibliothèque standard `smtp` et la configuration de notre application Flask
+
+Créons un tache `send_emails` dans le fichier `email_service/worker/tasks.py`
+```python
+import os
 import logging
-from logging.handlers import RotatingFileHandler
+import smtplib
+from .worker import app
+from config import Config
+
+
+logger = logging.getLogger(__name__)
+
+
+@app.task(bind=True, name='send_emails')
+def send_emails(self, recipients, subject, payload):
+    """
+    Send emails
+    """
+    try:
+        if Config.MAIL_USE_SSL:
+            server = smtplib.SMTP_SSL(Config.MAIL_SERVER, Config.MAIL_PORT)
+
+        else:
+            server = smtplib.SMTP(Config.MAIL_SERVER, Config.MAIL_PORT)
+        server.ehlo()
+
+        if Config.MAIL_USERNAME != '':
+            server.login(Config.MAIL_USERNAME, Config.MAIL_PASSWORD)
+
+        for recipient in recipients:
+            message = "From: {0}\nTo: {1}\nSubject: {2}\n\n{3}".format(
+                Config.MAIL_DEFAULT_SENDER,
+                recipient,
+                subject,
+                payload
+            )
+
+            server.sendmail(Config.MAIL_DEFAULT_SENDER, recipient, message)
+
+        server.close()
+
+    except Exception as ex:
+        logger.error('Something goes wrong --> {0}'.format(ex))
+```
+> Pour simplifier le code, nous n'utilisons plus la fonction `render_email`
+
+La dernière étape consiste à ajouter la configuration de Celery dans la configuration de notre application Flask :
+```python
+...
 
 class Config:
     """
     Base configuration
     """
+    CELERY_BACKEND = 'redis://localhost/0
+    CELERY_BROKER = 'redis://localhost/
+    CELERY_IMPORTS = ('worker.tasks')
     MAIL_SERVER = 'localhost'
     MAIL_PORT = 1025
     MAIL_USE_TLS = False
@@ -1008,64 +1028,14 @@ class Config:
     MAIL_USERNAME = ''
     MAIL_PASSWORD = ''
     MAIL_DEFAULT_SENDER = 'will@dev.fr'
-    CELERY_RESULT_BACKEND = 'redis://localhost/0'
-    CELERY_BROKER_URL = 'redis://localhost'
-    LOG_PATH = ''
+    LOG_PATH = '<your path>'
     LOG_SIZE = 20000
     LOG_COUNT = 10
     LOG_ENCODING = 'utf-8'
     LOG_LEVEL = 'DEBUG'
-    @staticmethod
-    def init_app(app):
-        """
-        Init app
-        :param app: Flask App
-        :type app: Flask
-        """
-        pass
+
+...
 ```
-
-### Création de la tache d'envoi de email
-
-Maintenant que nous avons lié Celery à notre application Flask, nous pouvons reprendre ce que nous avons vu précédemment.
-
-Créons un fichier `tasks.py` dans le dossier `email_service/app/` et ajoutons la logique d'envoi de emails
-```python
-# -*- coding: utf-8 -*-
-from datetime import datetime
-from flask import current_app
-from flask_mail import Message
-from email.utils import format_datetime
-from . import make_celery
-from .extensions import mail
-from .utils import render_email
-celery = make_celery()
-
-@celery.task(bind=True)
-def send_email(self, args):
-    try:
-        with current_app.app_context():
-            with mail.connect() as conn:
-                for address in args['recipients']:
-                    data = {
-                        'date': format_datetime(datetime.utcnow()),
-                        'to': address,
-                        'from': current_app.config['MAIL_DEFAULT_SENDER'],
-                        'subject': args['subject'],
-                        'content': args['content']
-                    }
-                    msg = Message(
-                        recipients=[address],
-                        body=render_email(args['template'], data),
-                        subject=args['subject']
-                    )
-                    conn.send(msg)
-                return True
-    except Exception as ex:
-        raise ex
-```
-
-La ligne `with current_app.app_context()` permet d'être sûr que l'extension mail est initialisée et cela nous permet de lire la configuration de l'application Flask en cours
 
 ### Utilisation de la tache
 Maintenant que tout est en place, nous pouvons mettre en place l'envoi de fichiers en complètent la méthode d'envoi dans le fichier `email_service/app/api/endpoints/email.py`.
@@ -1092,12 +1062,16 @@ send_email_reponse = api.model('Send Email response', {
 Nous pouvons maintenant modifier le fichier `email_service/app/api/endpoints/email.py` afin d'appeler la tâche d'envoi de email
 ```python
 # -*- coding: utf-8 -*-
+
 import re
+from worker.tasks import send_emails
 from flask import request, current_app
 from flask_restplus import Namespace, Resource, abort
 from ..serializers.email import send_email_model
 
+
 ns = Namespace('email', description='Email related operation')
+
 
 # =========================================================================
 # ENDPOINTS
@@ -1106,20 +1080,24 @@ ns = Namespace('email', description='Email related operation')
 #
 # =========================================================================
 
+
 @ns.route('/')
 class EmailSend(Resource):
+
     @ns.expect(send_email_model)
     def post(self):
         """
         Send email
         """
         data = request.json
+
         for email in data['recipients']:
             if not re.match(r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)", email):
                 current_app.logger.error('{0} not pass email regex.'.format(email))
                 abort(400, error='{0} not pass email regex.'.format(email))
-        from app.tasks import send_email
-        task = send_email.apply_async(args=[data])
+
+        task = send_emails.s(data['recipients'], data['subject'], data['content']).delay()
+
         return {'id': task.id}
 ```
 
@@ -1129,7 +1107,7 @@ Il nous reste maintenant à démarrer le worker Celery et notre application
 
 Lancer le worker :
 ```
-celery -A app.tasks worker -P eventlet --loglevel=info
+celery -A worker.worker worker -P eventlet --loglevel=info
 ```
 
 
@@ -1169,8 +1147,9 @@ class Config:
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME', '')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', '')
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'dev@dev.dev')
-    CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost/0')
-    CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost')
+    CELERY_BACKEND = os.environ.get('CELERY_BACKEND', 'redis://localhost/0')
+    CELERY_BROKER = os.environ.get('CELERY_BROKER', 'redis://localhost')
+    CELERY_IMPORTS = ('worker.tasks')
     LOG_PATH = os.environ.get('LOG_PATH', os.path.join(basedir, 'logs.log'))
     LOG_SIZE = int(os.environ.get('LOG_SIZE', '20000'))
     LOG_COUNT = int(os.environ.get('LOG_COUNT', '10'))
@@ -1207,106 +1186,121 @@ if __name__ == "__main__":
 ``` 
 
 ### Dockerfile
-Il est maintenant temps de créer un container de notre application, pour cela nous allons créer un `Dockerfile`.
+Il est maintenant temps de créer les images des container de notre application, pour cela nous allons créer deux `Dockerfile`, un pour l'application Flask, l'autre pour l'application Celery
 
-Créons un dossier `docker` dans le dossier `email_service` puis créons un fichier `Dockerfile`
+Créons l'arboresence suivante :
+```
+docker
+  backend
+    Dockerfile
+  worker
+    Dockerfile
+```
+
+Commencons par le `Dockerfile` de notre API dans le fichier `email_service/docker/backend/Dockerfile` :
 ```Dockerfile
-FROM python:3
+FROM python:3.6
+
 ADD ./requirements.txt /tmp/
 RUN pip3 install -r /tmp/requirements.txt
-ADD ./app/ /app/
-ADD ./*.py /
+
+RUN mkdir /email
+ADD ./app/ /email/app/
+ADD ./worker/ /email/worker/
+ADD ./*.py /email/
+
+WORKDIR /email
+
+CMD ["python", "runserver.py"]
 ```
 
 Rien de compliqué ici, nous partons d'une base Python 3, nous installons les requirements et nous ajoutons l'ensemble des fichiers de notre programme.
 
 Nous pouvons maintenant construire notre container :
 ```
-docker build -t email_dev -f .\docker\Dockerfile .
+docker build -t email_dev -f .\docker\backend\Dockerfile .
 ```
 
-Une fois construits, nous pouvons lancer notre service avec la commande suivante :
+Une fois construits, nous pouvons lancer notre API avec la commande suivante :
 ```
-docker run --name email_dev -d -p 8000:8000 email_dev uwsgi --socket 0.0.0.0:8000 --protocol=http -w wsgi
+docker run --name email_dev -d -p 8000:8000 -e MAIL_SERVER=smtp_dev -e CELERY_RESULT_BACKEND=redis://redis_dev/0 -e CELERY_BROKER_URL=redis://redis_dev -e MAIL_PORT=25 --link redis_dev:redis_dev --link smtp_dev:smtp_dev email_dev uwsgi --socket 0.0.0.0:8000 --protocol=http -w wsgi
 ```
 
 Nous pouvons maintenant nous rendre à l'adresse `http://localhost:8000/api` et voir que notre service fonctionne.
 
-Par contre nous n'avons pas démarré notre worker.
-
-Pour démarrer notre worket et notre service en même temps nous allons créer un fichier `start.sh` dans le dossier `email_service` qui contiendra les commandes pour lancer notre worker et notre application
-```sh
-#!/bin/sh
-celery multi start emailworker -A app.tasks
-uwsgi --socket 0.0.0.0:8000 --protocol=http -w wsgi
-```
-
-Il faut ensuite modifier et reconstruire notre image.
+La prochaine étape est de créer le container de notre application Celery dans le fichier `email_service/docker/worker/Dockerfile`
 ```Dockerfile
-FROM python:3
+FROM python:3.6
+
 ADD ./requirements.txt /tmp/
 RUN pip3 install -r /tmp/requirements.txt
-ADD ./app/ /app/
-ADD ./*.py /
-ADD ./start.sh /
+
+RUN mkdir /worker
+ADD ./worker/ /worker/worker/
+ADD ./config.py /worker/
+
+WORKDIR /worker
 ```
 
-Maintenant nous pouvons lancer notre container à l'aide
+Construisons notre container avec la commande suivante :
 ```
-docker run --name email_dev -d -p 8000:8000 email_dev sh start.sh
-```
-
-Mais cela ne fonctionnera pas, car maintenant notre container n'a plus accès à Redis et MailCatcher il faut donc reconfigurer les adresses de Redis et de MailCatcher
-Ce qui nous donne en fait :
-```
-docker run --name email_dev -d -p 8000:8000 -e MAIL_SERVER=smtp_dev -e CELERY_RESULT_BACKEND=redis://redis_dev/0 -e CELERY_BROKER_URL=redis://r
-edis_dev -e MAIL_PORT=25 --link redis_dev:redis_dev --link smtp_dev:smtp_dev email_dev sh start.sh
+docker build -t email_worker_dev -f .\docker\worker\Dockerfile .
 ```
 
-Voilà notre service est fonctionnel et accessible à l'adresse `http://localhost:8000/api` et notre MailCatcher à l'adresse `http://localhost:1080`
+Une fois construits, nous pouvons lancer notre API avec la commande suivante :
+```
+docker run --name email_worker_dev -d -e MAIL_SERVER=smtp_dev -e CELERY_RESULT_BACKEND=redis://redis_dev/0 -e CELERY_BROKER_URL=redis://redis_dev -e MAIL_PORT=25 --link redis_dev:redis_dev --link smtp_dev:smtp_dev email_worker_dev celery worker --app=worker.worker.app --concurrency=1 --hostname=email_worker@%h --loglevel=INFO
+```
+
+Voilà notre service est fonctionnel et accessible à l'adresse `http://localhost:8000/api` et nous pouvons vérifier l'envoi des emails avec notre MailCatcher à l'adresse `http://localhost:1080`
 
 ## Packager notre application et son environnement
-L'étape suivante est de packager l'application et son environnement, pour cela nous allons créer un fichier `docker-compose.yml` qui contiendra notre application ainsi que Redis et MailCatcher
+L'étape suivante est de packager l'application et son environnement, pour cela, dans le dossier `docker`, nous allons créer un fichier `docker-compose.yml`  qui contiendra notre application ainsi que Redis et MailCatcher
 
 ```dockercompose
-version: '2'
+version: '3'
+
 services:
-  email:
+
+  backend:
     image: email_dev
-    command: sh start.sh
+    command: uwsgi --socket 0.0.0.0:8000 --protocol=http -w wsgi
     environment:
       - MAIL_SERVER=smtp
       - MAIL_PORT=25
-      - CELERY_RESULT_BACKEND=redis://redis/0
-      - CELERY_BROKER_URL=redis://redis
+      - CELERY_BACKEND=redis://redis/0
+      - CELERY_BROKER=redis://redis
     ports:
       - 80:8000
-    networks:
-      - services_network
+
+  worker:
+    image: email_worker_dev
+    command: celery worker --app=worker.worker.app --concurrency=1 --hostname=email_worker@%h --loglevel=INFO
+    environment:
+      - MAIL_SERVER=smtp
+      - MAIL_PORT=25
+      - CELERY_BACKEND=redis://redis/0
+      - CELERY_BROKER=redis://redis
+  
   redis:
     image: redis
-    networks:
-      - services_network
+
   smtp:
     image: tophfr/mailcatcher
     ports:
       - 1080:80
-    networks:
-      - services_network
-networks:
-  services_network:
-    driver: bridge
+
 ```
 
 Pour lancer notre service, il suffit de lancer la commande : 
 ```
-docker-compose up -d
+docker-compose -p email_stack -f .\docker\docker-compose.yml up -d
 ```
 
 Notre service est maintenant disponible à l'adresse `http://localhost/api` et notre MailCatcher à l'adresse `http://localhost:1080`
 Pour éteindre notre service il suffit de lancer la commande :
 ```
-docker-compose stop
+docker-compose -p email_stack -f .\docker\docker-compose.yml stop
 ```
 
 # 5 - Nginx
@@ -1318,63 +1312,102 @@ Pour pallier à ça, nous allons utiliser Nginx en tant que proxy inverse
 
 ## Mise en place
 
-Pour mettre en place Nginx nous devons modifier notre `Dockerfile` et notre `docker-compose.yml`
+Pour mettre en place Nginx nous devons :
+- Modifier notre fichier `docker-compose.yml`
+- Ajouter un fichier de configuration à notre application
+- Modifier la configuration de Nginx
 
-### Application
+### Fichiers de configuration
 
-La première chose à faire et d'ajouter un fichier de configuration pour `uwsgi` afin de configurer le service web et d'utiliser les sockets pour la communication service <--> réseau.
+Dans le dossier `docker` créons l'arboresence suivante
+```
+config
+  app.ini
+nginx
+  nginx.conf
+  services.conf
+```
 
-Créons un fichier `app.ini` dans le dossier `email_service`
+Pour lancer notre API nous allons utiliser un fichier .ini et le lancer avec uwsgi
+
+Ficher `email_service/docker/config.ini` :
 ```ini
 [uwsgi]
 mount = /=wsgi.py
 manage-script-name = true
 master = true
 processes = 5
-socket = /var/sockets/email.socket
+socket = /sockets/email.socket
 chmod-socket = 666
 vacuum = true
 die-on-term = true
 ```
+> Pour plus de rapidité entre Nginx et notre API nous allons communiquer par socket
 
-Nous allons ensuite créer un fichier `start_socket.sh`
+
+Il faut ensuite configurer Nginx pour prendre en compte nos modifications, nous allons surcharger la configuration par défaut afin d'inclure nos services
+
+Fichier de configuration `email_service/docker/nginx/nginx.conf` (honteusement copié sur internet):
+```conf
+# Define the user that will own and run the Nginx server
+user  nginx;
+# Define the number of worker processes; recommended value is the number of
+# cores that are being used by your server
+worker_processes  1;
+
+# Define the location on the file system of the error log, plus the minimum
+# severity to log messages for
+error_log  /var/log/nginx/error.log warn;
+# Define the file that will store the process ID of the main NGINX process
+pid        /var/run/nginx.pid;
+
+
+# events block defines the parameters that affect connection processing.
+events {
+    # Define the maximum number of simultaneous connections that can be opened by a worker process
+    worker_connections  1024;
+}
+
+
+# http block defines the parameters for how NGINX should handle HTTP web traffic
+http {
+    # Include the file defining the list of file types that are supported by NGINX
+    include       /etc/nginx/mime.types;
+    # Define the default file type that is returned to the user
+    default_type  text/html;
+
+    # Define the format of log messages.
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    # Define the location of the log of access attempts to NGINX
+    access_log  /var/log/nginx/access.log  main;
+
+    # Define the parameters to optimize the delivery of static content
+    sendfile        on;
+    tcp_nopush     on;
+    tcp_nodelay    on;
+
+    # Define the timeout value for keep-alive connections with the client
+    keepalive_timeout  65;
+
+    # Define the usage of the gzip compression algorithm to reduce the amount of data to transmit
+    #gzip  on;
+
+    # Include additional parameters for virtual host(s)/server(s)
+    include /etc/nginx/conf.d/*.conf;
+}
 ```
-#!/bin/sh
-celery multi start emailworker -A app.tasks --loglevel=INFO --logfile=/var/log/%n%I.log --concurrency=2
-uwsgi --ini app.ini
-```
 
-Modifions le fichier `email_service/docker/Dockerfile` afin d'inclure tout les fichiers .sh et notre fichier .ini
-```
-FROM python:3
-ADD ./requirements.txt /tmp/
-RUN pip3 install -r /tmp/requirements.txt
-ADD ./app/ /app/
-ADD ./*.ini /
-ADD ./*.py /
-ADD ./*.sh /
-```
-
-Il faut maintenant reconstruire notre container
-```
-docker build -t email_dev -f .\docker\Dockerfile .
-```
-
-### Package
-
-La prochaine étape est de modifier notre fichier `docker-compose.yml` afin d'intégrer Nginx et les sockets
-
-#### Nginx
-
-Avant de modifier le fichier `docker-compose.yml`, nous allons devoir reconstruire le container Nginx pour prendre en compte notre service, pour cela créons un dossier `nginx` dans le dossier `email_service/docker`.
-
-Dans ce dossier, créons un fichier `services.conf`
+Il nous reste remplir le fichier `services.conf` afin de déclarer nos services :
 ```conf
 server {
   listen 80;
   charset utf-8;
+
   location / {
-    uwsgi_pass unix:/var/sockets/email.socket;
+    uwsgi_pass unix:/sockets/email.socket;
     uwsgi_param SCRIPT_NAME /;
     uwsgi_modifier1 30;
     include uwsgi_params;
@@ -1382,56 +1415,61 @@ server {
 }
 ```
 
-Puis créons un fichier `Dockerfile` qui construira notre nouveau container Nginx :
-```
-FROM nginx
-RUN rm /etc/nginx/conf.d/default.conf
-COPY services.conf /etc/nginx/conf.d/
-```
+### docker-compose
 
-#### Docker compose
-Nous pouvons maintenant modifier notre fichier `docker-compose.yml` afin d'y ajouter Nginx.
+Nous devons maintenant :
+- Ajouter Nginx à notre `docker-compose.yml`
+- Permettre la communication par socket entre Nginx et notre API
+- Lancer notre API à l'aide du fichier ini
 
-Afin que Nginx ait accès à notre socket `email.socket`, nous mettons en place un volume
+
 ```dockercompose
-version: '2'
+version: '3'
+
 services:
+
   nginx:
-      build: ./nginx
-      ports:
-        - 80:80
-      networks:
-        - services_network
-      volumes:
-        - sockets:/var/sockets/
-  email:
+    image: 'nginx:stable'
+    volumes:
+      - sockets:/sockets/
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/services.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - 80:80
+    
+
+  backend:
     image: email_dev
-    command: sh start_socket.sh
+    command: uwsgi app.ini
     environment:
       - MAIL_SERVER=smtp
       - MAIL_PORT=25
-      - CELERY_RESULT_BACKEND=redis://redis/0
-      - CELERY_BROKER_URL=redis://redis
-    networks:
-      - services_network
+      - CELERY_BACKEND=redis://redis/0
+      - CELERY_BROKER=redis://redis
     volumes:
-      - sockets:/var/sockets/
+      - sockets:/sockets
+      - ./config/app.ini:/email/app.ini
+
+  worker:
+    image: email_worker_dev
+    command: celery worker --app=worker.worker.app --concurrency=1 --hostname=worker@%h --loglevel=INFO
+    environment:
+      - MAIL_SERVER=smtp
+      - MAIL_PORT=25
+      - CELERY_BACKEND=redis://redis/0
+      - CELERY_BROKER=redis://redis
+  
   redis:
     image: redis
-    networks:
-      - services_network
+
   smtp:
     image: tophfr/mailcatcher
     ports:
       - 1080:80
-    networks:
-      - services_network
+
 volumes:
   sockets:
     driver: local
-networks:
-  services_network:
-    driver: bridge
 ```
 
 

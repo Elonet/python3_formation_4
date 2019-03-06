@@ -73,8 +73,8 @@
       <h1 id="python-3-formation-4">Python 3 Formation 4</h1>
 <p><img src="https://elonet.fr/img/logo.png" alt="Elonet"></p>
 <h1 id="micro-service">1 - Micro service</h1>
-<p>Dans la précédente formation, nous avons vu comment construire un service REST à l’aide de Flask et de l’extension Flask RestPlus, nous allons maintenant mettre ça en pratique à travers un micro-service d’envoi d’emails.<br>
-L’objectif est de pouvoir envoyer un email à un grand nombre de personnes tout en ayant un service qui répond très rapidement aux requêtes.</p>
+<p>Dans la précédente formation, nous avons vu comment construire un service REST à l’aide de Flask et de l’extension Flask RestPlus, nous allons maintenant mettre ça en pratique à travers un micro-service d’envoi d’emails.</p>
+<p>L’objectif est de pouvoir envoyer un email à un grand nombre de personnes tout en ayant un service qui répond très rapidement aux requêtes.</p>
 <h2 id="mise-en-place-du-micro-service">Mise en place du micro service</h2>
 <p>Afin de ne pas trop revenir sur le chapitre précédent, je vous fournis une template de micro-service Flask RestPlus que vous pourrez réutiliser dans vos projets.</p>
 <p>Copier le projet : <a href="https://github.com/averdier/restplus_template">https://github.com/averdier/restplus_template</a> et renommer le dossier en <code>email_service</code></p>
@@ -745,7 +745,7 @@ Une solution est d’utiliser <code>Celery</code>, une bibliothèque offrant un 
 <p>Il faut aussi installer le connecteur <code>Redis</code></p>
 </blockquote>
 <pre><code>pip install celery
-pip install redis==2.10.6
+pip install redis
 </code></pre>
 <h2 id="usage-1">Usage</h2>
 <h3 id="création-de-lapplication">Création de l’application</h3>
@@ -909,72 +909,89 @@ app <span class="token operator">=</span> Celery<span class="token punctuation">
 <p>Dans le cas de notre service d’envoi de email, même si un envoi dure 10 minutes, le micro service répondra instantanément et sera capable de fournir l’état d’avancement de l’envoi.</p>
 <p>De plus il est même possible de programmer un minuteur avant l’envoi</p>
 <h3 id="mise-en-place">Mise en place</h3>
-<p>Pour pouvoir utiliser Celery avec notre service Flask, il faut ajouter une usine à application Celery dans le fichier <code>email_service/app/__init.py</code></p>
-<p>Le code de l’usine à Celery provient directement de la documentation Flask :</p>
-<pre class=" language-python"><code class="prism  language-python"><span class="token comment"># -*- coding: utf-8 -*-</span>
-<span class="token keyword">from</span> flask <span class="token keyword">import</span> Flask
-<span class="token keyword">from</span> celery <span class="token keyword">import</span> Celery
-<span class="token keyword">from</span> config <span class="token keyword">import</span> config
-<span class="token keyword">from</span> <span class="token punctuation">.</span>extensions <span class="token keyword">import</span> mail
-
-<span class="token keyword">def</span> <span class="token function">make_celery</span><span class="token punctuation">(</span>app<span class="token operator">=</span><span class="token boolean">None</span><span class="token punctuation">,</span> config_name<span class="token operator">=</span><span class="token string">'default'</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
-    <span class="token triple-quoted-string string">"""
-    Create Celery application
-
-    :param app: Flask application
-    :type app: Flask
-
-    :return: Celery application
-    :rtype: Celery
-    """</span>
-    app <span class="token operator">=</span> app <span class="token operator">or</span> create_app<span class="token punctuation">(</span>config_name<span class="token punctuation">)</span>
-    celery <span class="token operator">=</span> Celery<span class="token punctuation">(</span>app<span class="token punctuation">.</span>import_name<span class="token punctuation">,</span> backend<span class="token operator">=</span>app<span class="token punctuation">.</span>config<span class="token punctuation">[</span><span class="token string">'CELERY_RESULT_BACKEND'</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
-                    broker<span class="token operator">=</span>app<span class="token punctuation">.</span>config<span class="token punctuation">[</span><span class="token string">'CELERY_BROKER_URL'</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
-    celery<span class="token punctuation">.</span>conf<span class="token punctuation">.</span>update<span class="token punctuation">(</span>app<span class="token punctuation">.</span>config<span class="token punctuation">)</span>
-    TaskBase <span class="token operator">=</span> celery<span class="token punctuation">.</span>Task
-    <span class="token keyword">class</span> <span class="token class-name">ContextTask</span><span class="token punctuation">(</span>TaskBase<span class="token punctuation">)</span><span class="token punctuation">:</span>
-        abstract <span class="token operator">=</span> <span class="token boolean">True</span>
-        <span class="token keyword">def</span> <span class="token function">__call__</span><span class="token punctuation">(</span>self<span class="token punctuation">,</span> <span class="token operator">*</span>args<span class="token punctuation">,</span> <span class="token operator">**</span>kwargs<span class="token punctuation">)</span><span class="token punctuation">:</span>
-            <span class="token keyword">with</span> app<span class="token punctuation">.</span>app_context<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
-                <span class="token keyword">return</span> TaskBase<span class="token punctuation">.</span>__call__<span class="token punctuation">(</span>self<span class="token punctuation">,</span> <span class="token operator">*</span>args<span class="token punctuation">,</span> <span class="token operator">**</span>kwargs<span class="token punctuation">)</span>
-    celery<span class="token punctuation">.</span>Task <span class="token operator">=</span> ContextTask
-    <span class="token keyword">return</span> celery
-
-<span class="token keyword">def</span> <span class="token function">create_app</span><span class="token punctuation">(</span>config_name<span class="token operator">=</span><span class="token string">'default'</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
-    <span class="token triple-quoted-string string">"""
-    Create application
-    :param config_name: Configuration name
-    :type config_name: str
-    :return: Flask app
-    :rtype: Flask
-    """</span>
-    <span class="token comment"># Import blueprint here</span>
-    <span class="token comment"># from .xxx import blueprint as xxx_blueprint</span>
-    <span class="token keyword">from</span> <span class="token punctuation">.</span>api <span class="token keyword">import</span> blueprint <span class="token keyword">as</span> api_blueprint
-    app <span class="token operator">=</span> Flask<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
-    app<span class="token punctuation">.</span>config<span class="token punctuation">.</span>from_object<span class="token punctuation">(</span>config<span class="token punctuation">[</span>config_name<span class="token punctuation">]</span><span class="token punctuation">)</span>
-    <span class="token comment"># Register blueprint here</span>
-    <span class="token comment"># app.register_blueprint(xxx_blueprint)</span>
-    app<span class="token punctuation">.</span>register_blueprint<span class="token punctuation">(</span>api_blueprint<span class="token punctuation">)</span>
-    extensions<span class="token punctuation">(</span>app<span class="token punctuation">)</span>
-    <span class="token keyword">return</span> app
-
-<span class="token keyword">def</span> <span class="token function">extensions</span><span class="token punctuation">(</span>flask_app<span class="token punctuation">)</span><span class="token punctuation">:</span>
-    <span class="token triple-quoted-string string">"""
-    Init extensions
-    :param flask_app:
-    """</span>
-    mail<span class="token punctuation">.</span>init_app<span class="token punctuation">(</span>flask_app<span class="token punctuation">)</span>
+<p>Pour pouvoir utiliser Celery avec notre service Flask, il faut créer une application Celery que nous pourrons appeler et lancer.</p>
+<p>Créons un dossier l’arboresence suivante:</p>
+<pre><code>worker
+  __init__.py
+  worker.py
+  tasks.py
 </code></pre>
-<p>Nous voyons que Celery nécessite <code>CELERY_RESULT_BACKEND</code> et <code>CELERY_BROKER_URL</code> dans la configuration, ajoutons les propriétés dans notre fichier <code>email_service/config.py</code></p>
+<blockquote>
+<p>Le fichier <a href="http://worker.py">worker.py</a> contiendra notre application Celery qui sera lancée par le worker<br>
+Le fichier <a href="http://tasks.py">tasks.py</a> contiendra les taches de notre application Celery</p>
+</blockquote>
+<p>Commencons par créer l’application Celery à partir de la configuration de notre application Flask</p>
+<p>Fichier <code>email_service/worker/worker.py</code></p>
 <pre class=" language-python"><code class="prism  language-python"><span class="token comment"># -*- coding: utf-8 -*-</span>
+
+<span class="token keyword">import</span> os
+<span class="token keyword">from</span> celery <span class="token keyword">import</span> Celery
+<span class="token keyword">from</span> config <span class="token keyword">import</span> Config
+
+app <span class="token operator">=</span> Celery<span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+app<span class="token punctuation">.</span>conf<span class="token punctuation">.</span>update<span class="token punctuation">(</span><span class="token punctuation">{</span>
+    <span class="token string">'BROKER_URL'</span><span class="token punctuation">:</span> Config<span class="token punctuation">.</span>CELERY_BROKER<span class="token punctuation">,</span>
+    <span class="token string">'BACKEND_URL'</span><span class="token punctuation">:</span> Config<span class="token punctuation">.</span>CELERY_BACKEND<span class="token punctuation">,</span>
+    <span class="token string">'CELERY_IMPORTS'</span><span class="token punctuation">:</span> Config<span class="token punctuation">.</span>CELERY_IMPORTS
+<span class="token punctuation">}</span><span class="token punctuation">)</span>
+</code></pre>
+<p>Pour l’envoi de email, nous ne pouvons plus utiliser Flask-Mail, nous allons utiliser la bibliothèque standard <code>smtp</code> et la configuration de notre application Flask</p>
+<p>Créons un tache <code>send_emails</code> dans le fichier <code>email_service/worker/tasks.py</code></p>
+<pre class=" language-python"><code class="prism  language-python"><span class="token keyword">import</span> os
 <span class="token keyword">import</span> logging
-<span class="token keyword">from</span> logging<span class="token punctuation">.</span>handlers <span class="token keyword">import</span> RotatingFileHandler
+<span class="token keyword">import</span> smtplib
+<span class="token keyword">from</span> <span class="token punctuation">.</span>worker <span class="token keyword">import</span> app
+<span class="token keyword">from</span> config <span class="token keyword">import</span> Config
+
+
+logger <span class="token operator">=</span> logging<span class="token punctuation">.</span>getLogger<span class="token punctuation">(</span>__name__<span class="token punctuation">)</span>
+
+
+@app<span class="token punctuation">.</span>task<span class="token punctuation">(</span>bind<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">,</span> name<span class="token operator">=</span><span class="token string">'send_emails'</span><span class="token punctuation">)</span>
+<span class="token keyword">def</span> <span class="token function">send_emails</span><span class="token punctuation">(</span>self<span class="token punctuation">,</span> recipients<span class="token punctuation">,</span> subject<span class="token punctuation">,</span> payload<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token triple-quoted-string string">"""
+    Send emails
+    """</span>
+    <span class="token keyword">try</span><span class="token punctuation">:</span>
+        <span class="token keyword">if</span> Config<span class="token punctuation">.</span>MAIL_USE_SSL<span class="token punctuation">:</span>
+            server <span class="token operator">=</span> smtplib<span class="token punctuation">.</span>SMTP_SSL<span class="token punctuation">(</span>Config<span class="token punctuation">.</span>MAIL_SERVER<span class="token punctuation">,</span> Config<span class="token punctuation">.</span>MAIL_PORT<span class="token punctuation">)</span>
+
+        <span class="token keyword">else</span><span class="token punctuation">:</span>
+            server <span class="token operator">=</span> smtplib<span class="token punctuation">.</span>SMTP<span class="token punctuation">(</span>Config<span class="token punctuation">.</span>MAIL_SERVER<span class="token punctuation">,</span> Config<span class="token punctuation">.</span>MAIL_PORT<span class="token punctuation">)</span>
+        server<span class="token punctuation">.</span>ehlo<span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+        <span class="token keyword">if</span> Config<span class="token punctuation">.</span>MAIL_USERNAME <span class="token operator">!=</span> <span class="token string">''</span><span class="token punctuation">:</span>
+            server<span class="token punctuation">.</span>login<span class="token punctuation">(</span>Config<span class="token punctuation">.</span>MAIL_USERNAME<span class="token punctuation">,</span> Config<span class="token punctuation">.</span>MAIL_PASSWORD<span class="token punctuation">)</span>
+
+        <span class="token keyword">for</span> recipient <span class="token keyword">in</span> recipients<span class="token punctuation">:</span>
+            message <span class="token operator">=</span> <span class="token string">"From: {0}\nTo: {1}\nSubject: {2}\n\n{3}"</span><span class="token punctuation">.</span><span class="token builtin">format</span><span class="token punctuation">(</span>
+                Config<span class="token punctuation">.</span>MAIL_DEFAULT_SENDER<span class="token punctuation">,</span>
+                recipient<span class="token punctuation">,</span>
+                subject<span class="token punctuation">,</span>
+                payload
+            <span class="token punctuation">)</span>
+
+            server<span class="token punctuation">.</span>sendmail<span class="token punctuation">(</span>Config<span class="token punctuation">.</span>MAIL_DEFAULT_SENDER<span class="token punctuation">,</span> recipient<span class="token punctuation">,</span> message<span class="token punctuation">)</span>
+
+        server<span class="token punctuation">.</span>close<span class="token punctuation">(</span><span class="token punctuation">)</span>
+
+    <span class="token keyword">except</span> Exception <span class="token keyword">as</span> ex<span class="token punctuation">:</span>
+        logger<span class="token punctuation">.</span>error<span class="token punctuation">(</span><span class="token string">'Something goes wrong --&gt; {0}'</span><span class="token punctuation">.</span><span class="token builtin">format</span><span class="token punctuation">(</span>ex<span class="token punctuation">)</span><span class="token punctuation">)</span>
+</code></pre>
+<blockquote>
+<p>Pour simplifier le code, nous n’utilisons plus la fonction <code>render_email</code></p>
+</blockquote>
+<p>La dernière étape consiste à ajouter la configuration de Celery dans la configuration de notre application Flask :</p>
+<pre class=" language-python"><code class="prism  language-python"><span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
 
 <span class="token keyword">class</span> <span class="token class-name">Config</span><span class="token punctuation">:</span>
     <span class="token triple-quoted-string string">"""
     Base configuration
     """</span>
+    CELERY_BACKEND <span class="token operator">=</span> 'redis<span class="token punctuation">:</span><span class="token operator">//</span>localhost<span class="token operator">/</span><span class="token number">0</span>
+    CELERY_BROKER <span class="token operator">=</span> 'redis<span class="token punctuation">:</span><span class="token operator">//</span>localhost<span class="token operator">/</span>
+    CELERY_IMPORTS <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token string">'worker.tasks'</span><span class="token punctuation">)</span>
     MAIL_SERVER <span class="token operator">=</span> <span class="token string">'localhost'</span>
     MAIL_PORT <span class="token operator">=</span> <span class="token number">1025</span>
     MAIL_USE_TLS <span class="token operator">=</span> <span class="token boolean">False</span>
@@ -982,59 +999,14 @@ app <span class="token operator">=</span> Celery<span class="token punctuation">
     MAIL_USERNAME <span class="token operator">=</span> <span class="token string">''</span>
     MAIL_PASSWORD <span class="token operator">=</span> <span class="token string">''</span>
     MAIL_DEFAULT_SENDER <span class="token operator">=</span> <span class="token string">'will@dev.fr'</span>
-    CELERY_RESULT_BACKEND <span class="token operator">=</span> <span class="token string">'redis://localhost/0'</span>
-    CELERY_BROKER_URL <span class="token operator">=</span> <span class="token string">'redis://localhost'</span>
-    LOG_PATH <span class="token operator">=</span> <span class="token string">''</span>
+    LOG_PATH <span class="token operator">=</span> <span class="token string">'&lt;your path&gt;'</span>
     LOG_SIZE <span class="token operator">=</span> <span class="token number">20000</span>
     LOG_COUNT <span class="token operator">=</span> <span class="token number">10</span>
     LOG_ENCODING <span class="token operator">=</span> <span class="token string">'utf-8'</span>
     LOG_LEVEL <span class="token operator">=</span> <span class="token string">'DEBUG'</span>
-    @<span class="token builtin">staticmethod</span>
-    <span class="token keyword">def</span> <span class="token function">init_app</span><span class="token punctuation">(</span>app<span class="token punctuation">)</span><span class="token punctuation">:</span>
-        <span class="token triple-quoted-string string">"""
-        Init app
-        :param app: Flask App
-        :type app: Flask
-        """</span>
-        <span class="token keyword">pass</span>
-</code></pre>
-<h3 id="création-de-la-tache-denvoi-de-email">Création de la tache d’envoi de email</h3>
-<p>Maintenant que nous avons lié Celery à notre application Flask, nous pouvons reprendre ce que nous avons vu précédemment.</p>
-<p>Créons un fichier <code>tasks.py</code> dans le dossier <code>email_service/app/</code> et ajoutons la logique d’envoi de emails</p>
-<pre class=" language-python"><code class="prism  language-python"><span class="token comment"># -*- coding: utf-8 -*-</span>
-<span class="token keyword">from</span> datetime <span class="token keyword">import</span> datetime
-<span class="token keyword">from</span> flask <span class="token keyword">import</span> current_app
-<span class="token keyword">from</span> flask_mail <span class="token keyword">import</span> Message
-<span class="token keyword">from</span> email<span class="token punctuation">.</span>utils <span class="token keyword">import</span> format_datetime
-<span class="token keyword">from</span> <span class="token punctuation">.</span> <span class="token keyword">import</span> make_celery
-<span class="token keyword">from</span> <span class="token punctuation">.</span>extensions <span class="token keyword">import</span> mail
-<span class="token keyword">from</span> <span class="token punctuation">.</span>utils <span class="token keyword">import</span> render_email
-celery <span class="token operator">=</span> make_celery<span class="token punctuation">(</span><span class="token punctuation">)</span>
 
-@celery<span class="token punctuation">.</span>task<span class="token punctuation">(</span>bind<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span>
-<span class="token keyword">def</span> <span class="token function">send_email</span><span class="token punctuation">(</span>self<span class="token punctuation">,</span> args<span class="token punctuation">)</span><span class="token punctuation">:</span>
-    <span class="token keyword">try</span><span class="token punctuation">:</span>
-        <span class="token keyword">with</span> current_app<span class="token punctuation">.</span>app_context<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
-            <span class="token keyword">with</span> mail<span class="token punctuation">.</span>connect<span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token keyword">as</span> conn<span class="token punctuation">:</span>
-                <span class="token keyword">for</span> address <span class="token keyword">in</span> args<span class="token punctuation">[</span><span class="token string">'recipients'</span><span class="token punctuation">]</span><span class="token punctuation">:</span>
-                    data <span class="token operator">=</span> <span class="token punctuation">{</span>
-                        <span class="token string">'date'</span><span class="token punctuation">:</span> format_datetime<span class="token punctuation">(</span>datetime<span class="token punctuation">.</span>utcnow<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
-                        <span class="token string">'to'</span><span class="token punctuation">:</span> address<span class="token punctuation">,</span>
-                        <span class="token string">'from'</span><span class="token punctuation">:</span> current_app<span class="token punctuation">.</span>config<span class="token punctuation">[</span><span class="token string">'MAIL_DEFAULT_SENDER'</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
-                        <span class="token string">'subject'</span><span class="token punctuation">:</span> args<span class="token punctuation">[</span><span class="token string">'subject'</span><span class="token punctuation">]</span><span class="token punctuation">,</span>
-                        <span class="token string">'content'</span><span class="token punctuation">:</span> args<span class="token punctuation">[</span><span class="token string">'content'</span><span class="token punctuation">]</span>
-                    <span class="token punctuation">}</span>
-                    msg <span class="token operator">=</span> Message<span class="token punctuation">(</span>
-                        recipients<span class="token operator">=</span><span class="token punctuation">[</span>address<span class="token punctuation">]</span><span class="token punctuation">,</span>
-                        body<span class="token operator">=</span>render_email<span class="token punctuation">(</span>args<span class="token punctuation">[</span><span class="token string">'template'</span><span class="token punctuation">]</span><span class="token punctuation">,</span> data<span class="token punctuation">)</span><span class="token punctuation">,</span>
-                        subject<span class="token operator">=</span>args<span class="token punctuation">[</span><span class="token string">'subject'</span><span class="token punctuation">]</span>
-                    <span class="token punctuation">)</span>
-                    conn<span class="token punctuation">.</span>send<span class="token punctuation">(</span>msg<span class="token punctuation">)</span>
-                <span class="token keyword">return</span> <span class="token boolean">True</span>
-    <span class="token keyword">except</span> Exception <span class="token keyword">as</span> ex<span class="token punctuation">:</span>
-        <span class="token keyword">raise</span> ex
+<span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span>
 </code></pre>
-<p>La ligne <code>with current_app.app_context()</code> permet d’être sûr que l’extension mail est initialisée et cela nous permet de lire la configuration de l’application Flask en cours</p>
 <h3 id="utilisation-de-la-tache">Utilisation de la tache</h3>
 <p>Maintenant que tout est en place, nous pouvons mettre en place l’envoi de fichiers en complètent la méthode d’envoi dans le fichier <code>email_service/app/api/endpoints/email.py</code>.</p>
 <p>Une fois la tâche lancée, le service retournera l’identifiant de la tâche afin que l’utilisateur puisse suivre l’évolution.</p>
@@ -1055,12 +1027,16 @@ send_email_reponse <span class="token operator">=</span> api<span class="token p
 </code></pre>
 <p>Nous pouvons maintenant modifier le fichier <code>email_service/app/api/endpoints/email.py</code> afin d’appeler la tâche d’envoi de email</p>
 <pre class=" language-python"><code class="prism  language-python"><span class="token comment"># -*- coding: utf-8 -*-</span>
+
 <span class="token keyword">import</span> re
+<span class="token keyword">from</span> worker<span class="token punctuation">.</span>tasks <span class="token keyword">import</span> send_emails
 <span class="token keyword">from</span> flask <span class="token keyword">import</span> request<span class="token punctuation">,</span> current_app
 <span class="token keyword">from</span> flask_restplus <span class="token keyword">import</span> Namespace<span class="token punctuation">,</span> Resource<span class="token punctuation">,</span> abort
 <span class="token keyword">from</span> <span class="token punctuation">.</span><span class="token punctuation">.</span>serializers<span class="token punctuation">.</span>email <span class="token keyword">import</span> send_email_model
 
+
 ns <span class="token operator">=</span> Namespace<span class="token punctuation">(</span><span class="token string">'email'</span><span class="token punctuation">,</span> description<span class="token operator">=</span><span class="token string">'Email related operation'</span><span class="token punctuation">)</span>
+
 
 <span class="token comment"># =========================================================================</span>
 <span class="token comment"># ENDPOINTS</span>
@@ -1069,26 +1045,30 @@ ns <span class="token operator">=</span> Namespace<span class="token punctuation
 <span class="token comment">#</span>
 <span class="token comment"># =========================================================================</span>
 
+
 @ns<span class="token punctuation">.</span>route<span class="token punctuation">(</span><span class="token string">'/'</span><span class="token punctuation">)</span>
 <span class="token keyword">class</span> <span class="token class-name">EmailSend</span><span class="token punctuation">(</span>Resource<span class="token punctuation">)</span><span class="token punctuation">:</span>
+
     @ns<span class="token punctuation">.</span>expect<span class="token punctuation">(</span>send_email_model<span class="token punctuation">)</span>
     <span class="token keyword">def</span> <span class="token function">post</span><span class="token punctuation">(</span>self<span class="token punctuation">)</span><span class="token punctuation">:</span>
         <span class="token triple-quoted-string string">"""
         Send email
         """</span>
         data <span class="token operator">=</span> request<span class="token punctuation">.</span>json
+
         <span class="token keyword">for</span> email <span class="token keyword">in</span> data<span class="token punctuation">[</span><span class="token string">'recipients'</span><span class="token punctuation">]</span><span class="token punctuation">:</span>
             <span class="token keyword">if</span> <span class="token operator">not</span> re<span class="token punctuation">.</span>match<span class="token punctuation">(</span>r<span class="token string">"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)"</span><span class="token punctuation">,</span> email<span class="token punctuation">)</span><span class="token punctuation">:</span>
                 current_app<span class="token punctuation">.</span>logger<span class="token punctuation">.</span>error<span class="token punctuation">(</span><span class="token string">'{0} not pass email regex.'</span><span class="token punctuation">.</span><span class="token builtin">format</span><span class="token punctuation">(</span>email<span class="token punctuation">)</span><span class="token punctuation">)</span>
                 abort<span class="token punctuation">(</span><span class="token number">400</span><span class="token punctuation">,</span> error<span class="token operator">=</span><span class="token string">'{0} not pass email regex.'</span><span class="token punctuation">.</span><span class="token builtin">format</span><span class="token punctuation">(</span>email<span class="token punctuation">)</span><span class="token punctuation">)</span>
-        <span class="token keyword">from</span> app<span class="token punctuation">.</span>tasks <span class="token keyword">import</span> send_email
-        task <span class="token operator">=</span> send_email<span class="token punctuation">.</span>apply_async<span class="token punctuation">(</span>args<span class="token operator">=</span><span class="token punctuation">[</span>data<span class="token punctuation">]</span><span class="token punctuation">)</span>
+
+        task <span class="token operator">=</span> send_emails<span class="token punctuation">.</span>s<span class="token punctuation">(</span>data<span class="token punctuation">[</span><span class="token string">'recipients'</span><span class="token punctuation">]</span><span class="token punctuation">,</span> data<span class="token punctuation">[</span><span class="token string">'subject'</span><span class="token punctuation">]</span><span class="token punctuation">,</span> data<span class="token punctuation">[</span><span class="token string">'content'</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">.</span>delay<span class="token punctuation">(</span><span class="token punctuation">)</span>
+
         <span class="token keyword">return</span> <span class="token punctuation">{</span><span class="token string">'id'</span><span class="token punctuation">:</span> task<span class="token punctuation">.</span><span class="token builtin">id</span><span class="token punctuation">}</span>
 </code></pre>
 <h3 id="lancement">Lancement</h3>
 <p>Il nous reste maintenant à démarrer le worker Celery et notre application</p>
 <p>Lancer le worker :</p>
-<pre><code>celery -A app.tasks worker -P eventlet --loglevel=info
+<pre><code>celery -A worker.worker worker -P eventlet --loglevel=info
 </code></pre>
 <h1 id="docker">4 - Docker</h1>
 <p>Nous allons maintenant voir comment créer un container de notre application, cela passe par 3 étapes :</p>
@@ -1121,8 +1101,9 @@ basedir <span class="token operator">=</span> os<span class="token punctuation">
     MAIL_USERNAME <span class="token operator">=</span> os<span class="token punctuation">.</span>environ<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'MAIL_USERNAME'</span><span class="token punctuation">,</span> <span class="token string">''</span><span class="token punctuation">)</span>
     MAIL_PASSWORD <span class="token operator">=</span> os<span class="token punctuation">.</span>environ<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'MAIL_PASSWORD'</span><span class="token punctuation">,</span> <span class="token string">''</span><span class="token punctuation">)</span>
     MAIL_DEFAULT_SENDER <span class="token operator">=</span> os<span class="token punctuation">.</span>environ<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'MAIL_DEFAULT_SENDER'</span><span class="token punctuation">,</span> <span class="token string">'dev@dev.dev'</span><span class="token punctuation">)</span>
-    CELERY_RESULT_BACKEND <span class="token operator">=</span> os<span class="token punctuation">.</span>environ<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'CELERY_RESULT_BACKEND'</span><span class="token punctuation">,</span> <span class="token string">'redis://localhost/0'</span><span class="token punctuation">)</span>
-    CELERY_BROKER_URL <span class="token operator">=</span> os<span class="token punctuation">.</span>environ<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'CELERY_BROKER_URL'</span><span class="token punctuation">,</span> <span class="token string">'redis://localhost'</span><span class="token punctuation">)</span>
+    CELERY_BACKEND <span class="token operator">=</span> os<span class="token punctuation">.</span>environ<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'CELERY_BACKEND'</span><span class="token punctuation">,</span> <span class="token string">'redis://localhost/0'</span><span class="token punctuation">)</span>
+    CELERY_BROKER <span class="token operator">=</span> os<span class="token punctuation">.</span>environ<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'CELERY_BROKER'</span><span class="token punctuation">,</span> <span class="token string">'redis://localhost'</span><span class="token punctuation">)</span>
+    CELERY_IMPORTS <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token string">'worker.tasks'</span><span class="token punctuation">)</span>
     LOG_PATH <span class="token operator">=</span> os<span class="token punctuation">.</span>environ<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'LOG_PATH'</span><span class="token punctuation">,</span> os<span class="token punctuation">.</span>path<span class="token punctuation">.</span>join<span class="token punctuation">(</span>basedir<span class="token punctuation">,</span> <span class="token string">'logs.log'</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
     LOG_SIZE <span class="token operator">=</span> <span class="token builtin">int</span><span class="token punctuation">(</span>os<span class="token punctuation">.</span>environ<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'LOG_SIZE'</span><span class="token punctuation">,</span> <span class="token string">'20000'</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
     LOG_COUNT <span class="token operator">=</span> <span class="token builtin">int</span><span class="token punctuation">(</span>os<span class="token punctuation">.</span>environ<span class="token punctuation">.</span>get<span class="token punctuation">(</span><span class="token string">'LOG_COUNT'</span><span class="token punctuation">,</span> <span class="token string">'10'</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
@@ -1150,81 +1131,97 @@ basedir <span class="token operator">=</span> os<span class="token punctuation">
     application<span class="token punctuation">.</span>run<span class="token punctuation">(</span><span class="token punctuation">)</span>
 </code></pre>
 <h3 id="dockerfile">Dockerfile</h3>
-<p>Il est maintenant temps de créer un container de notre application, pour cela nous allons créer un <code>Dockerfile</code>.</p>
-<p>Créons un dossier <code>docker</code> dans le dossier <code>email_service</code> puis créons un fichier <code>Dockerfile</code></p>
-<pre class=" language-dockerfile"><code class="prism  language-dockerfile"><span class="token keyword">FROM</span> python<span class="token punctuation">:</span>3
+<p>Il est maintenant temps de créer les images des container de notre application, pour cela nous allons créer deux <code>Dockerfile</code>, un pour l’application Flask, l’autre pour l’application Celery</p>
+<p>Créons l’arboresence suivante :</p>
+<pre><code>docker
+  backend
+    Dockerfile
+  worker
+    Dockerfile
+</code></pre>
+<p>Commencons par le <code>Dockerfile</code> de notre API dans le fichier <code>email_service/docker/backend/Dockerfile</code> :</p>
+<pre class=" language-dockerfile"><code class="prism  language-dockerfile"><span class="token keyword">FROM</span> python<span class="token punctuation">:</span>3.6
+
 <span class="token keyword">ADD</span> ./requirements.txt /tmp/
 <span class="token keyword">RUN</span> pip3 install <span class="token punctuation">-</span>r /tmp/requirements.txt
-<span class="token keyword">ADD</span> ./app/ /app/
-<span class="token keyword">ADD</span> ./*.py /
+
+<span class="token keyword">RUN</span> mkdir /email
+<span class="token keyword">ADD</span> ./app/ /email/app/
+<span class="token keyword">ADD</span> ./worker/ /email/worker/
+<span class="token keyword">ADD</span> ./*.py /email/
+
+<span class="token keyword">WORKDIR</span> /email
+
+<span class="token keyword">CMD</span> <span class="token punctuation">[</span><span class="token string">"python"</span><span class="token punctuation">,</span> <span class="token string">"runserver.py"</span><span class="token punctuation">]</span>
 </code></pre>
 <p>Rien de compliqué ici, nous partons d’une base Python 3, nous installons les requirements et nous ajoutons l’ensemble des fichiers de notre programme.</p>
 <p>Nous pouvons maintenant construire notre container :</p>
-<pre><code>docker build -t email_dev -f .\docker\Dockerfile .
+<pre><code>docker build -t email_dev -f .\docker\backend\Dockerfile .
 </code></pre>
-<p>Une fois construits, nous pouvons lancer notre service avec la commande suivante :</p>
-<pre><code>docker run --name email_dev -d -p 8000:8000 email_dev uwsgi --socket 0.0.0.0:8000 --protocol=http -w wsgi
+<p>Une fois construits, nous pouvons lancer notre API avec la commande suivante :</p>
+<pre><code>docker run --name email_dev -d -p 8000:8000 -e MAIL_SERVER=smtp_dev -e CELERY_RESULT_BACKEND=redis://redis_dev/0 -e CELERY_BROKER_URL=redis://redis_dev -e MAIL_PORT=25 --link redis_dev:redis_dev --link smtp_dev:smtp_dev email_dev uwsgi --socket 0.0.0.0:8000 --protocol=http -w wsgi
 </code></pre>
 <p>Nous pouvons maintenant nous rendre à l’adresse <code>http://localhost:8000/api</code> et voir que notre service fonctionne.</p>
-<p>Par contre nous n’avons pas démarré notre worker.</p>
-<p>Pour démarrer notre worket et notre service en même temps nous allons créer un fichier <code>start.sh</code> dans le dossier <code>email_service</code> qui contiendra les commandes pour lancer notre worker et notre application</p>
-<pre class=" language-sh"><code class="prism  language-sh">#!/bin/sh
-celery multi start emailworker -A app.tasks
-uwsgi --socket 0.0.0.0:8000 --protocol=http -w wsgi
-</code></pre>
-<p>Il faut ensuite modifier et reconstruire notre image.</p>
-<pre class=" language-dockerfile"><code class="prism  language-dockerfile"><span class="token keyword">FROM</span> python<span class="token punctuation">:</span>3
+<p>La prochaine étape est de créer le container de notre application Celery dans le fichier <code>email_service/docker/worker/Dockerfile</code></p>
+<pre class=" language-dockerfile"><code class="prism  language-dockerfile"><span class="token keyword">FROM</span> python<span class="token punctuation">:</span>3.6
+
 <span class="token keyword">ADD</span> ./requirements.txt /tmp/
 <span class="token keyword">RUN</span> pip3 install <span class="token punctuation">-</span>r /tmp/requirements.txt
-<span class="token keyword">ADD</span> ./app/ /app/
-<span class="token keyword">ADD</span> ./*.py /
-<span class="token keyword">ADD</span> ./start.sh /
+
+<span class="token keyword">RUN</span> mkdir /worker
+<span class="token keyword">ADD</span> ./worker/ /worker/worker/
+<span class="token keyword">ADD</span> ./config.py /worker/
+
+<span class="token keyword">WORKDIR</span> /worker
 </code></pre>
-<p>Maintenant nous pouvons lancer notre container à l’aide</p>
-<pre><code>docker run --name email_dev -d -p 8000:8000 email_dev sh start.sh
+<p>Construisons notre container avec la commande suivante :</p>
+<pre><code>docker build -t email_worker_dev -f .\docker\worker\Dockerfile .
 </code></pre>
-<p>Mais cela ne fonctionnera pas, car maintenant notre container n’a plus accès à Redis et MailCatcher il faut donc reconfigurer les adresses de Redis et de MailCatcher<br>
-Ce qui nous donne en fait :</p>
-<pre><code>docker run --name email_dev -d -p 8000:8000 -e MAIL_SERVER=smtp_dev -e CELERY_RESULT_BACKEND=redis://redis_dev/0 -e CELERY_BROKER_URL=redis://r
-edis_dev -e MAIL_PORT=25 --link redis_dev:redis_dev --link smtp_dev:smtp_dev email_dev sh start.sh
+<p>Une fois construits, nous pouvons lancer notre API avec la commande suivante :</p>
+<pre><code>docker run --name email_worker_dev -d -e MAIL_SERVER=smtp_dev -e CELERY_RESULT_BACKEND=redis://redis_dev/0 -e CELERY_BROKER_URL=redis://redis_dev -e MAIL_PORT=25 --link redis_dev:redis_dev --link smtp_dev:smtp_dev email_worker_dev celery worker --app=worker.worker.app --concurrency=1 --hostname=email_worker@%h --loglevel=INFO
 </code></pre>
-<p>Voilà notre service est fonctionnel et accessible à l’adresse <code>http://localhost:8000/api</code> et notre MailCatcher à l’adresse <code>http://localhost:1080</code></p>
+<p>Voilà notre service est fonctionnel et accessible à l’adresse <code>http://localhost:8000/api</code> et nous pouvons vérifier l’envoi des emails avec notre MailCatcher à l’adresse <code>http://localhost:1080</code></p>
 <h2 id="packager-notre-application-et-son-environnement">Packager notre application et son environnement</h2>
-<p>L’étape suivante est de packager l’application et son environnement, pour cela nous allons créer un fichier <code>docker-compose.yml</code> qui contiendra notre application ainsi que Redis et MailCatcher</p>
-<pre class=" language-dockercompose"><code class="prism  language-dockercompose">version: '2'
+<p>L’étape suivante est de packager l’application et son environnement, pour cela, dans le dossier <code>docker</code>, nous allons créer un fichier <code>docker-compose.yml</code>  qui contiendra notre application ainsi que Redis et MailCatcher</p>
+<pre class=" language-dockercompose"><code class="prism  language-dockercompose">version: '3'
+
 services:
-  email:
+
+  backend:
     image: email_dev
-    command: sh start.sh
+    command: uwsgi --socket 0.0.0.0:8000 --protocol=http -w wsgi
     environment:
       - MAIL_SERVER=smtp
       - MAIL_PORT=25
-      - CELERY_RESULT_BACKEND=redis://redis/0
-      - CELERY_BROKER_URL=redis://redis
+      - CELERY_BACKEND=redis://redis/0
+      - CELERY_BROKER=redis://redis
     ports:
       - 80:8000
-    networks:
-      - services_network
+
+  worker:
+    image: email_worker_dev
+    command: celery worker --app=worker.worker.app --concurrency=1 --hostname=email_worker@%h --loglevel=INFO
+    environment:
+      - MAIL_SERVER=smtp
+      - MAIL_PORT=25
+      - CELERY_BACKEND=redis://redis/0
+      - CELERY_BROKER=redis://redis
+  
   redis:
     image: redis
-    networks:
-      - services_network
+
   smtp:
     image: tophfr/mailcatcher
     ports:
       - 1080:80
-    networks:
-      - services_network
-networks:
-  services_network:
-    driver: bridge
+
 </code></pre>
 <p>Pour lancer notre service, il suffit de lancer la commande :</p>
-<pre><code>docker-compose up -d
+<pre><code>docker-compose -p email_stack -f .\docker\docker-compose.yml up -d
 </code></pre>
 <p>Notre service est maintenant disponible à l’adresse <code>http://localhost/api</code> et notre MailCatcher à l’adresse <code>http://localhost:1080</code><br>
 Pour éteindre notre service il suffit de lancer la commande :</p>
-<pre><code>docker-compose stop
+<pre><code>docker-compose -p email_stack -f .\docker\docker-compose.yml stop
 </code></pre>
 <h1 id="nginx">5 - Nginx</h1>
 <p>Actuellement nous avons 2 problèmes :</p>
@@ -1234,99 +1231,153 @@ Pour éteindre notre service il suffit de lancer la commande :</p>
 </ul>
 <p>Pour pallier à ça, nous allons utiliser Nginx en tant que proxy inverse</p>
 <h2 id="mise-en-place-1">Mise en place</h2>
-<p>Pour mettre en place Nginx nous devons modifier notre <code>Dockerfile</code> et notre <code>docker-compose.yml</code></p>
-<h3 id="application">Application</h3>
-<p>La première chose à faire et d’ajouter un fichier de configuration pour <code>uwsgi</code> afin de configurer le service web et d’utiliser les sockets pour la communication service &lt;–&gt; réseau.</p>
-<p>Créons un fichier <code>app.ini</code> dans le dossier <code>email_service</code></p>
+<p>Pour mettre en place Nginx nous devons :</p>
+<ul>
+<li>Modifier notre fichier <code>docker-compose.yml</code></li>
+<li>Ajouter un fichier de configuration à notre application</li>
+<li>Modifier la configuration de Nginx</li>
+</ul>
+<h3 id="fichiers-de-configuration">Fichiers de configuration</h3>
+<p>Dans le dossier <code>docker</code> créons l’arboresence suivante</p>
+<pre><code>config
+  app.ini
+nginx
+  nginx.conf
+  services.conf
+</code></pre>
+<p>Pour lancer notre API nous allons utiliser un fichier .ini et le lancer avec uwsgi</p>
+<p>Ficher <code>email_service/docker/config.ini</code> :</p>
 <pre class=" language-ini"><code class="prism  language-ini"><span class="token selector">[uwsgi]</span>
 <span class="token constant">mount</span> <span class="token attr-value"><span class="token punctuation">=</span> /=wsgi.py</span>
 <span class="token constant">manage-script-name</span> <span class="token attr-value"><span class="token punctuation">=</span> true</span>
 <span class="token constant">master</span> <span class="token attr-value"><span class="token punctuation">=</span> true</span>
 <span class="token constant">processes</span> <span class="token attr-value"><span class="token punctuation">=</span> 5</span>
-<span class="token constant">socket</span> <span class="token attr-value"><span class="token punctuation">=</span> /var/sockets/email.socket</span>
+<span class="token constant">socket</span> <span class="token attr-value"><span class="token punctuation">=</span> /sockets/email.socket</span>
 <span class="token constant">chmod-socket</span> <span class="token attr-value"><span class="token punctuation">=</span> 666</span>
 <span class="token constant">vacuum</span> <span class="token attr-value"><span class="token punctuation">=</span> true</span>
 <span class="token constant">die-on-term</span> <span class="token attr-value"><span class="token punctuation">=</span> true</span>
 </code></pre>
-<p>Nous allons ensuite créer un fichier <code>start_socket.sh</code></p>
-<pre><code>#!/bin/sh
-celery multi start emailworker -A app.tasks --loglevel=INFO --logfile=/var/log/%n%I.log --concurrency=2
-uwsgi --ini app.ini
+<blockquote>
+<p>Pour plus de rapidité entre Nginx et notre API nous allons communiquer par socket</p>
+</blockquote>
+<p>Il faut ensuite configurer Nginx pour prendre en compte nos modifications, nous allons surcharger la configuration par défaut afin d’inclure nos services</p>
+<p>Fichier de configuration <code>email_service/docker/nginx/nginx.conf</code> (honteusement copié sur internet):</p>
+<pre class=" language-conf"><code class="prism  language-conf"># Define the user that will own and run the Nginx server
+user  nginx;
+# Define the number of worker processes; recommended value is the number of
+# cores that are being used by your server
+worker_processes  1;
+
+# Define the location on the file system of the error log, plus the minimum
+# severity to log messages for
+error_log  /var/log/nginx/error.log warn;
+# Define the file that will store the process ID of the main NGINX process
+pid        /var/run/nginx.pid;
+
+
+# events block defines the parameters that affect connection processing.
+events {
+    # Define the maximum number of simultaneous connections that can be opened by a worker process
+    worker_connections  1024;
+}
+
+
+# http block defines the parameters for how NGINX should handle HTTP web traffic
+http {
+    # Include the file defining the list of file types that are supported by NGINX
+    include       /etc/nginx/mime.types;
+    # Define the default file type that is returned to the user
+    default_type  text/html;
+
+    # Define the format of log messages.
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    # Define the location of the log of access attempts to NGINX
+    access_log  /var/log/nginx/access.log  main;
+
+    # Define the parameters to optimize the delivery of static content
+    sendfile        on;
+    tcp_nopush     on;
+    tcp_nodelay    on;
+
+    # Define the timeout value for keep-alive connections with the client
+    keepalive_timeout  65;
+
+    # Define the usage of the gzip compression algorithm to reduce the amount of data to transmit
+    #gzip  on;
+
+    # Include additional parameters for virtual host(s)/server(s)
+    include /etc/nginx/conf.d/*.conf;
+}
 </code></pre>
-<p>Modifions le fichier <code>email_service/docker/Dockerfile</code> afin d’inclure tout les fichiers .sh et notre fichier .ini</p>
-<pre><code>FROM python:3
-ADD ./requirements.txt /tmp/
-RUN pip3 install -r /tmp/requirements.txt
-ADD ./app/ /app/
-ADD ./*.ini /
-ADD ./*.py /
-ADD ./*.sh /
-</code></pre>
-<p>Il faut maintenant reconstruire notre container</p>
-<pre><code>docker build -t email_dev -f .\docker\Dockerfile .
-</code></pre>
-<h3 id="package">Package</h3>
-<p>La prochaine étape est de modifier notre fichier <code>docker-compose.yml</code> afin d’intégrer Nginx et les sockets</p>
-<h4 id="nginx-1">Nginx</h4>
-<p>Avant de modifier le fichier <code>docker-compose.yml</code>, nous allons devoir reconstruire le container Nginx pour prendre en compte notre service, pour cela créons un dossier <code>nginx</code> dans le dossier <code>email_service/docker</code>.</p>
-<p>Dans ce dossier, créons un fichier <code>services.conf</code></p>
+<p>Il nous reste remplir le fichier <code>services.conf</code> afin de déclarer nos services :</p>
 <pre class=" language-conf"><code class="prism  language-conf">server {
   listen 80;
   charset utf-8;
+
   location / {
-    uwsgi_pass unix:/var/sockets/email.socket;
+    uwsgi_pass unix:/sockets/email.socket;
     uwsgi_param SCRIPT_NAME /;
     uwsgi_modifier1 30;
     include uwsgi_params;
   }
 }
 </code></pre>
-<p>Puis créons un fichier <code>Dockerfile</code> qui construira notre nouveau container Nginx :</p>
-<pre><code>FROM nginx
-RUN rm /etc/nginx/conf.d/default.conf
-COPY services.conf /etc/nginx/conf.d/
-</code></pre>
-<h4 id="docker-compose">Docker compose</h4>
-<p>Nous pouvons maintenant modifier notre fichier <code>docker-compose.yml</code> afin d’y ajouter Nginx.</p>
-<p>Afin que Nginx ait accès à notre socket <code>email.socket</code>, nous mettons en place un volume</p>
-<pre class=" language-dockercompose"><code class="prism  language-dockercompose">version: '2'
+<h3 id="docker-compose">docker-compose</h3>
+<p>Nous devons maintenant :</p>
+<ul>
+<li>Ajouter Nginx à notre <code>docker-compose.yml</code></li>
+<li>Permettre la communication par socket entre Nginx et notre API</li>
+<li>Lancer notre API à l’aide du fichier ini</li>
+</ul>
+<pre class=" language-dockercompose"><code class="prism  language-dockercompose">version: '3'
+
 services:
+
   nginx:
-      build: ./nginx
-      ports:
-        - 80:80
-      networks:
-        - services_network
-      volumes:
-        - sockets:/var/sockets/
-  email:
+    image: 'nginx:stable'
+    volumes:
+      - sockets:/sockets/
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/services.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - 80:80
+    
+
+  backend:
     image: email_dev
-    command: sh start_socket.sh
+    command: uwsgi app.ini
     environment:
       - MAIL_SERVER=smtp
       - MAIL_PORT=25
-      - CELERY_RESULT_BACKEND=redis://redis/0
-      - CELERY_BROKER_URL=redis://redis
-    networks:
-      - services_network
+      - CELERY_BACKEND=redis://redis/0
+      - CELERY_BROKER=redis://redis
     volumes:
-      - sockets:/var/sockets/
+      - sockets:/sockets
+      - ./config/app.ini:/email/app.ini
+
+  worker:
+    image: email_worker_dev
+    command: celery worker --app=worker.worker.app --concurrency=1 --hostname=worker@%h --loglevel=INFO
+    environment:
+      - MAIL_SERVER=smtp
+      - MAIL_PORT=25
+      - CELERY_BACKEND=redis://redis/0
+      - CELERY_BROKER=redis://redis
+  
   redis:
     image: redis
-    networks:
-      - services_network
+
   smtp:
     image: tophfr/mailcatcher
     ports:
       - 1080:80
-    networks:
-      - services_network
+
 volumes:
   sockets:
     driver: local
-networks:
-  services_network:
-    driver: bridge
 </code></pre>
 <h1 id="création-de-bibliothèques">6 - Création de bibliothèques</h1>
 <p>Jusqu’a présent nous avons vu comment utiliser des bibliothèques crées par des utilisateurs.</p>
